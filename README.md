@@ -284,6 +284,19 @@ The screenshots in the Demo Walkthrough show this flow end to end.
 - A lower source-display threshold may show weak source cards; a higher source-display threshold may hide useful source cards.
 - The app does not include authentication, multi-user isolation, PDF parsing, or document deletion.
 
+## Continuous Integration
+
+The GitHub Actions CI workflow checks:
+
+- Secret safety
+- Backend dependency installation
+- Backend compile/import safety
+- Frontend dependency installation
+- Frontend lint if available
+- Frontend production build
+
+CI does not require an OpenAI API key and does not run live OpenAI requests.
+
 ## Future Improvements
 
 - Add PDF and DOCX parsing.
@@ -292,6 +305,10 @@ The screenshots in the Demo Walkthrough show this flow end to end.
 - Add streaming answers.
 - Add automated backend and frontend tests.
 - Support deployed Chroma or another managed vector database.
+
+## License
+
+This project is licensed under the MIT License.
 
 ## Resume Bullet Points
 

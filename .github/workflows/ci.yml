@@ -1,0 +1,111 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Scan tracked files for local env files and OpenAI keys
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          failed=0
+
+          for env_file in backend/.env frontend/.env.local .env .env.local; do
+            if git ls-files --error-unmatch "$env_file" >/dev/null 2>&1; then
+              echo "::error file=$env_file::Local environment file is tracked. Remove it from Git."
+              failed=1
+            fi
+          done
+
+          # Strong OpenAI key patterns only. This intentionally allows placeholders
+          # like OPENAI_API_KEY=your_openai_api_key_here and avoids weak matches
+          # such as short "sk-" substrings in lockfiles.
+          openai_key_pattern='sk-proj-[A-Za-z0-9_-]{20,}|sk-[A-Za-z0-9_-]{32,}'
+
+          matches="$(
+            git grep -nI -E "$openai_key_pattern" -- \
+              . \
+              ':(exclude).git/**' \
+              ':(exclude)node_modules/**' \
+              ':(exclude)frontend/node_modules/**' \
+              ':(exclude)backend/.venv/**' \
+              ':(exclude).venv/**' \
+              ':(exclude).next/**' \
+              ':(exclude)frontend/.next/**' \
+              ':(exclude)backend/chroma_db/**' \
+              || true
+          )"
+
+          if [ -n "$matches" ]; then
+            echo "$matches"
+            echo "::error::Possible real OpenAI API key found in tracked files."
+            failed=1
+          fi
+
+          exit "$failed"
+
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: uv sync
+
+      - name: Compile backend
+        working-directory: backend
+        run: uv run python -m compileall app
+
+      - name: Import backend app
+        working-directory: backend
+        run: uv run python -c "import app.main; print('backend import ok')"
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Lint frontend
+        working-directory: frontend
+        run: npm run lint --if-present
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
